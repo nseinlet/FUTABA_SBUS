@@ -1,17 +1,18 @@
 #include "FUTABA_SBUS.h"
 
 void FUTABA_SBUS::begin(){
-	uint8_t loc_sbusData[25] = {
+	uint8_t loc_sbusData[SBUS_DATA_SIZE+1] = {
 	  0x0f,0x01,0x04,0x20,0x00,0xff,0x07,0x40,0x00,0x02,0x10,0x80,0x2c,0x64,0x21,0x0b,0x59,0x08,0x40,0x00,0x02,0x10,0x80,0x00,0x00};
-	int16_t loc_channels[18]  = {
-	  		1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,0,0};
-	int16_t loc_servos[18]    = {
-  			1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,0,0};
-  	port.begin(BAUDRATE);
 
-	memcpy(sbusData,loc_sbusData,25);
-	memcpy(channels,loc_channels,18);
-	memcpy(servos,loc_servos,18);
+	memcpy(sbusData,loc_sbusData,SBUS_DATA_SIZE+1);
+	for (int i=0;i<CHANNEL_SIZE;i++){
+    channels[i] = 1023;
+    servos[i] = 1023;
+    if (i>=CHANNEL_SIZE-2) {
+      channels[i] = 0;
+      servos[i] = 0;
+    };
+  }
 	failsafe_status = SBUS_SIGNAL_OK;
 	sbus_passthrough = 1;
 	toChannels = 0;
@@ -21,7 +22,7 @@ void FUTABA_SBUS::begin(){
 
 int16_t FUTABA_SBUS::Channel(uint8_t ch) {
   // Read channel data
-  if ((ch>0)&&(ch<=16)){
+  if ((ch>0)&&(ch<=CHANNEL_SIZE-2)){
     return channels[ch-1];
   }
   else{
@@ -39,7 +40,7 @@ uint8_t FUTABA_SBUS::DigiChannel(uint8_t ch) {
 }
 void FUTABA_SBUS::Servo(uint8_t ch, int16_t position) {
   // Set servo position
-  if ((ch>0)&&(ch<=16)) {
+  if ((ch>0)&&(ch<=CHANNEL_SIZE-2)) {
     if (position>2048) {
       position=2048;
     }
@@ -178,6 +179,16 @@ void FUTABA_SBUS::UpdateChannels(void) {
   channels[14] = ((sbusData[20]>>2|sbusData[21]<<6) & 0x07FF);
     channels[15] = ((sbusData[21]>>5|sbusData[22]<<3) & 0x07FF);
   #endif
+  #ifdef ACCESS_24
+  channels[16] = ((sbusData[23]|sbusData[24]<< 8) & 0x07FF);
+  channels[17] = ((sbusData[24]>>3|sbusData[25]<<5) & 0x07FF);
+  channels[18] = ((sbusData[25]>>6|sbusData[26]<<2|sbusData[27]<<10) & 0x07FF);
+  channels[19] = ((sbusData[27]>>1|sbusData[28]<<7) & 0x07FF);
+  channels[20] = ((sbusData[28]>>4|sbusData[29]<<4) & 0x07FF);
+  channels[21] = ((sbusData[29]>>7|sbusData[30]<<1|sbusData[31]<<9) & 0x07FF);
+  channels[22] = ((sbusData[31]>>2|sbusData[32]<<6) & 0x07FF);
+  channels[23] = ((sbusData[32]>>5|sbusData[33]<<3) & 0x07FF);
+  #endif
   // DigiChannel 1
   /*if (sbusData[23] & (1<<0)) {
     channels[16] = 1;
@@ -194,16 +205,16 @@ void FUTABA_SBUS::UpdateChannels(void) {
   }*/
   // Failsafe
   failsafe_status = SBUS_SIGNAL_OK;
-  if (sbusData[23] & (1<<2)) {
+  if (sbusData[SBUS_DATA_STATUS] & (1<<2)) {
     failsafe_status = SBUS_SIGNAL_LOST;
   }
-  if (sbusData[23] & (1<<3)) {
+  if (sbusData[SBUS_DATA_STATUS] & (1<<3)) {
     failsafe_status = SBUS_SIGNAL_FAILSAFE;
   }
 
 }
 void FUTABA_SBUS::FeedLine(void){
-  if (port.available() > 24){
+  if (port.available() > SBUS_DATA_SIZE){
     while(port.available() > 0){
       inData = port.read();
       switch (feedState){
@@ -217,20 +228,20 @@ void FUTABA_SBUS::FeedLine(void){
         else{
           bufferIndex = 0;
           inBuffer[bufferIndex] = inData;
-          inBuffer[24] = 0xff;
+          inBuffer[SBUS_DATA_SIZE] = 0xff;
           feedState = 1;
         }
         break;
       case 1:
         bufferIndex ++;
         inBuffer[bufferIndex] = inData;
-        if (bufferIndex < 24 && port.available() == 0){
+        if (bufferIndex < SBUS_DATA_SIZE && port.available() == 0){
           feedState = 0;
         }
-        if (bufferIndex == 24){
+        if (bufferIndex == SBUS_DATA_SIZE){
           feedState = 0;
-          if (inBuffer[0]==0x0f && inBuffer[24] == 0x00){
-            memcpy(sbusData,inBuffer,25);
+          if (inBuffer[0]==0x0f && inBuffer[SBUS_DATA_SIZE] == 0x00){
+            memcpy(sbusData,inBuffer,SBUS_DATA_SIZE+1);
             toChannels = 1;
           }
         }
