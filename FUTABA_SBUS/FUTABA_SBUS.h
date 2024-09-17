@@ -9,7 +9,11 @@
 #define SBUS_SIGNAL_LOST        0x01
 #define SBUS_SIGNAL_FAILSAFE    0x03
 #define BAUDRATE 100000
-#define port Serial1
+#if defined(ARDUINO_AVR_NANO_EVERY)
+  #define port Serial1
+#else
+  #define port Serial
+#endif
 //#define ALL_CHANNELS
 
 
